@@ -110,7 +110,7 @@
     outputEl.innerHTML = "";
 
     try {
-      const resp = await fetch("http://localhost:8787/api/rewrite", {
+ const resp = await fetch("/api/rewrite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
