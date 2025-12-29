@@ -7,43 +7,57 @@ export default async function handler(req, res) {
 
   try {
     const { text, tones = [], options = {} } = req.body || {};
-    if (!text) return res.status(400).json({ error: "Missing text" });
+    if (!text) {
+      return res.status(400).json({ error: "Missing text" });
+    }
 
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-    const prompt = `
-Rewrite the following text into multiple tones.
-Return ONLY valid JSON.
-
-Text:
-"${text}"
-
-Tones:
-${tones.join(", ")}
-
-Options:
-${JSON.stringify(options)}
-
-JSON format:
-{
-  "rewrites": [
-    { "tone": "tone name", "text": "rewritten text" }
-  ]
-}
-`;
-
-    const r = await client.responses.create({
-      model: "gpt-4.1-mini",
-      input: prompt,
-      temperature: 0.6
+    const client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
     });
 
-    const out = r.output_text.trim();
-    const json = JSON.parse(out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1));
+    const response = await client.responses.create({
+      model: "gpt-4.1-mini",
+      temperature: 0.6,
+      input: [
+        {
+          role: "system",
+          content: "You rewrite text into different tones. Respond ONLY with valid JSON."
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            text,
+            tones,
+            options,
+            output_format: {
+              rewrites: [{ tone: "string", text: "string" }]
+            }
+          })
+        }
+      ]
+    });
 
-    res.status(200).json(json);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Rewrite failed" });
+    // ✅ SAFE extraction
+    const outputText = response.output_text;
+
+    if (!outputText) {
+      return res.status(500).json({ error: "No output from model" });
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(outputText);
+    } catch (err) {
+      return res.status(500).json({
+        error: "Model did not return valid JSON",
+        raw: outputText
+      });
+    }
+
+    return res.status(200).json(parsed);
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Server error" });
   }
 }
