@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tone Rewriter (AI)</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 0; padding: 24px; max-width: 980px; }
+    textarea { width: 100%; min-height: 160px; padding: 12px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
+    label { display: inline-flex; gap: 8px; align-items: center; }
+    button { padding: 10px 12px; cursor: pointer; }
+    .out { border: 1px solid #ddd; border-radius: 10px; padding: 12px; margin-top: 12px; }
+    .tone { font-weight: 700; margin-bottom: 6px; }
+    .muted { color: #666; }
+  </style>
+</head>
+<body>
+  <h1>Tone Rewriter (AI)</h1>
+  <p class="muted">Runs locally: frontend → your Node server → OpenAI.</p>
+
+  <textarea id="input" placeholder="Paste your message..."></textarea>
+
+  <div class="row" id="tones"></div>
+
+  <div class="row">
+    <label><input type="checkbox" id="keepMeaning" checked /> Keep meaning</label>
+    <label><input type="checkbox" id="shorter" /> Shorter</label>
+    <label><input type="checkbox" id="longer" /> Longer</label>
+    <label><input type="checkbox" id="addEmoji" /> Add emojis</label>
+  </div>
+
+  <div class="row">
+    <button id="go">Rewrite</button>
+    <span class="muted" id="status"></span>
+  </div>
+
+  <div id="output"></div>
+
+<script>
+  const TONES = ["friendly","formal","direct","apologetic","confident","enthusiastic","empathetic","professional","polite","casual"];
+  const tonesEl = document.getElementById("tones");
+  const outputEl = document.getElementById("output");
+  const statusEl = document.getElementById("status");
+
+  function renderTones() {
+    tonesEl.innerHTML = "";
+    TONES.forEach(t => {
+      const lab = document.createElement("label");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = t;
+      cb.checked = ["friendly","formal","direct"].includes(t);
+      lab.appendChild(cb);
+      lab.appendChild(document.createTextNode(" " + t));
+      tonesEl.appendChild(lab);
+    });
+  }
+
+  function selectedTones() {
+    return [...tonesEl.querySelectorAll("input:checked")].map(x => x.value);
+  }
+
+  function renderOutput(rewrites) {
+    outputEl.innerHTML = "";
+    rewrites.forEach(r => {
+      const box = document.createElement("div");
+      box.className = "out";
+      const h = document.createElement("div");
+      h.className = "tone";
+      h.textContent = r.tone;
+      const pre = document.createElement("div");
+      pre.style.whiteSpace = "pre-wrap";
+      pre.textContent = r.text;
+
+      const copy = document.createElement("button");
+      copy.textContent = "Copy";
+      copy.style.marginTop = "10px";
+      copy.onclick = async () => {
+        await navigator.clipboard.writeText(r.text);
+        statusEl.textContent = `Copied ${r.tone}`;
+        setTimeout(() => statusEl.textContent = "", 1200);
+      };
+
+      box.appendChild(h);
+      box.appendChild(pre);
+      box.appendChild(copy);
+      outputEl.appendChild(box);
+    });
+  }
+
+  renderTones();
+
+  document.getElementById("go").addEventListener("click", async () => {
+    const text = document.getElementById("input").value.trim();
+    if (!text) return;
+
+    const body = {
+      text,
+      tones: selectedTones(),
+      options: {
+        keepMeaning: document.getElementById("keepMeaning").checked,
+        shorter: document.getElementById("shorter").checked,
+        longer: document.getElementById("longer").checked,
+        addEmoji: document.getElementById("addEmoji").checked,
+      }
+    };
+
+    statusEl.textContent = "Rewriting...";
+    outputEl.innerHTML = "";
+
+    try {
+      const resp = await fetch("http://localhost:8787/api/rewrite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.error || "Request failed");
+
+      renderOutput(data.rewrites || []);
+      statusEl.textContent = "Done";
+      setTimeout(() => statusEl.textContent = "", 1200);
+    } catch (e) {
+      statusEl.textContent = "Error: " + e.message;
+    }
+  });
+</script>
+</body>
+</html>
